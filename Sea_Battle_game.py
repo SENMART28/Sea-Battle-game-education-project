@@ -40,16 +40,33 @@ class Ship:
 
 
 class GamePole:
-    def __init__(self, size=10):
-        self._size = size
+    LETTERS_LIST = ['А', 'Б', 'В', 'Г', 'Д',
+                    'Е', 'Ж', 'З', 'И', 'К', 'Л', 'М', 'Н']
+
+    def __init__(self):
         self._ships = []
         self.create_pole()
+        
+    @classmethod
+    def coords_convertor(cls, x, y, size):
+        if x.isdigit():
+            x = int(x)
+        else:
+            x = cls.LETTERS_LIST.index(x) + 1
+        if not y.isdigit() or not (1 <= x <= size) or not (1 <= int(y) <= size):
+            raise IndexException()
+        y = int(y)
+        return x, y
 
     def create_pole(self):
-        self._pole = [[Cell() for k in range(self._size)]
-                      for i in range(self._size)]
-        self._closed_pole = [[Closed_Cell() for k in range(self._size)]
-                             for i in range(self._size)]
+        self._pole = [[Cell() for k in range(Controller.POLE_SIZE)]
+                      for i in range(Controller.POLE_SIZE)]
+        self._closed_pole = [[Closed_Cell() for k in range(Controller.POLE_SIZE)]
+                             for i in range(Controller.POLE_SIZE)]
+        
+    @property
+    def get_pole(self):
+        return self._pole
 
     def player_init(self):
         print('Для смостоятельного создания поля вам необходимо понимать принцип расстановки кораблей на карте!')
@@ -76,29 +93,21 @@ class GamePole:
                     continue
                 x, y = input(
                     'Введите координаты корабля в формате Буква - номер строки! Координата корабля считается от его верхней или крайней левой точки: ').split()
-                if x not in Game.LETTERS_LIST or not (1 <= int(y) <= self._size):
-                    print('координаты некорректны')
-                    continue
-                x = Game.LETTERS_LIST.index(x)
-                y = int(y) - 1
-                ship = Ship(int(length), tp, x, y)
-                if ship.is_out_pole(self._size):
+                x, y = self.coords_convertor(x, y, Controller.POLE_SIZE)
+                ship = Ship(int(length), tp, x - 1, y - 1)
+                if ship.is_out_pole(Controller.POLE_SIZE):
                     continue
                 for k in self._ships:
                     if k != ship:
                         if ship.is_collide(k):
-                            print(k.get_start_coords())
-                            print(ship.get_start_coords())
-                            print(ship.is_collide(k))
-                            print(ship.is_out_pole(self._size))
                             print('Такой корабль невозможно расположить на поле!')
                             break
                 else:
                     self._ships.append(ship)
                     ships_counter[length] -= 1
-                    self.set_cell(ship, 1)
+                    self.set_cell(ship, 'ship')
                     self.show()
-            except:
+            except Exception:
                 print('Вы ввели недопустимые значения!')
         print('Отлично, мы готовы начать игру!')
 
@@ -108,16 +117,16 @@ class GamePole:
 
         for k in self._ships:
             for counter in range(20):
-                x, y = randint(0, self._size - 1), randint(0, self._size - 1)
+                x, y = randint(0, Controller.POLE_SIZE - 1), randint(0, Controller.POLE_SIZE - 1)
                 k.set_start_coords(x, y)
-                if k.is_out_pole(self._size):
+                if k.is_out_pole(Controller.POLE_SIZE):
                     continue
                 for i in self._ships:
                     if i != k:
                         if k.is_collide(i):
                             break
                 else:
-                    self.set_cell(k, 1)
+                    self.set_cell(k, 'ship')
                     break
             else:
                 self.create_pole()
@@ -136,29 +145,27 @@ class GamePole:
             pole.owner_number = i
 
     def show(self):
-        print(('    ' + '  '.join(Game.LETTERS_LIST))[:4+self._size*3])
+        print(('    ' + '  '.join(self.LETTERS_LIST))[:4+Controller.POLE_SIZE*3])
         for ind, k in enumerate(self._pole):
             print(str(ind + 1).rjust(2, ' '), end=' ')
             for i in k:
-                print('⬜' if i._cell == 0 else '🟫' if i._cell ==
-                      2 else '⬛', end=' ')
+                print('⬜' if i._cell == 'closed' else '🟫' if i._cell ==
+                      'hit' else '⬛' if i._cell == 'ship' else '🟨', end=' ')
             print()
 
     def show_closed(self):
-        print(('    ' + '  '.join(Game.LETTERS_LIST))[:4+self._size*3])
+        print(('    ' + '  '.join(self.LETTERS_LIST))[:4+Controller.POLE_SIZE*3])
         for ind, k in enumerate(self._closed_pole):
             print(str(ind + 1).rjust(2, ' '), end=' ')
             for i in k:
-                print('🟦' if i._cell == 0 else '⬛', end=' ')
+                print('🟦' if i._cell == 'closed' else '⬛' if i._cell ==
+                      'opened and hit' else '⬜', end=' ')
             print()
 
 
 class Game:
-    LETTERS_LIST = ['А', 'Б', 'В', 'Г', 'Д',
-                    'Е', 'Ж', 'З', 'И', 'К', 'Л', 'М', 'Н']
-
-    def __init__(self, size=10, custom_mode=False):
-        self.pole = GamePole(size)
+    def __init__(self, custom_mode=False):
+        self.pole = GamePole()
         if not custom_mode:
             self.pole.init()
         else:
@@ -171,37 +178,74 @@ class Game:
         self.pole.show_closed()
 
     def set_shot(self, x, y, obj):
-        if x.isdigit():
-            x = int(x)
-        else:
-            x = self.LETTERS_LIST.index(x) + 1
-        if not y.isdigit() or not (1 <= x <= self.pole._size) or not (1 <= int(y) <= self.pole._size):
-            raise IndexException()
-        y = int(y)
-
-        pole = obj.pole._pole[y - 1][x - 1]
+        x, y = GamePole.coords_convertor(x, y, Controller.POLE_SIZE)
+        pole = obj.pole.get_pole[y - 1][x - 1]
         closed_pole = self.pole._closed_pole[y - 1][x - 1]
-        if not (pole._cell == 2 or pole.owner_ship is None or pole.owner_number is None):
+        if closed_pole._cell in ('opened and hit', 'opened'):
+            return 'opened'
+        if not (pole._cell == 'hit' or pole.owner_ship is None or pole.owner_number is None):
             pole.owner_ship._cells[pole.owner_number] = 0
-            pole._cell = 2
+            pole._cell = 'hit'
             pole.owner_number = None
-            closed_pole._cell = 1
+            closed_pole._cell = 'opened and hit'
             if all(map(lambda x: x == 0, pole.owner_ship._cells)):
                 return 'destroyed'
             return 'hit'
+        closed_pole._cell = 'hit'
+        pole._cell = 'opened'
         return 'missed'
+
+
+class Controller:
+    POLE_SIZE = 10
+    
+    def __init__(self, size, mode=False):
+        self.player = Game(mode)
+        self.bot = Game()
+        self.set_size(size)
+        
+    @classmethod
+    def set_size(cls, size):
+        cls.POLE_SIZE = size
+
+    def player_turn(self):
+        print('Ваше поле:')
+        self.player.show_closed()
+        print('Ваша очередь ходить!')
+        while True:
+            x, y = input(
+                'Для выстрела введимте координаты клетки в формате Буква - номер строки: ').split()
+            answer = self.player.set_shot(x, y, self.bot)
+            if answer == 'opened':
+                print('Данная клетка уже открыта, попробуйте другую!')
+            else:
+                break
+        print('Ваш результат: ' + answer)
+        self.bot_turn()
+
+    def bot_turn(self):
+        while True:
+            x, y = randint(1, self.POLE_SIZE), randint(1, self.POLE_SIZE)
+            answer = self.bot.set_shot(str(x), str(y), self.player)
+            if answer != 'opened':
+                break
+        bot_choice = f'{GamePole.LETTERS_LIST[x - 1]} {y}'
+        print('Бот сходил: ' + bot_choice)
+        self.player.show()
+        self.player_turn()
+
 
 
 class Cell:
     def __init__(self):
-        self._cell = 0
+        self._cell = 'closed'
         self.owner_ship = None
         self.owner_number = None
 
 
 class Closed_Cell:
     def __init__(self):
-        self._cell = 0
+        self._cell = 'closed'
 
 
 class PoleExceptions(Exception):
@@ -212,15 +256,8 @@ class IndexException(PoleExceptions):
     pass
 
 
-SIZE_GAME_POLE = 10
+SIZE_GAME_POLE = 12
 
 
-player = Game(SIZE_GAME_POLE, True)
-player.show()
-
-# while True:
-#     pole.show()
-#     if pole.set_shot(*input().split()):
-#         print('Ходит бот!')
-#     else:
-#         print('Попробуйте снова!')
+game = Controller(SIZE_GAME_POLE, True)
+game.player_turn()
