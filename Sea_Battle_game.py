@@ -200,9 +200,9 @@ class Controller:
     POLE_SIZE = 10
     
     def __init__(self, size, mode=False):
+        self.set_size(size)
         self.player = Game(mode)
         self.bot = Game()
-        self.set_size(size)
         
     @classmethod
     def set_size(cls, size):
@@ -256,7 +256,7 @@ class IndexException(PoleExceptions):
     pass
 
 
-SIZE_GAME_POLE = 12
+SIZE_GAME_POLE = 10
 
 
 game = Controller(SIZE_GAME_POLE, True)
