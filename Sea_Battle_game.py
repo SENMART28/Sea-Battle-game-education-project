@@ -267,6 +267,8 @@ class Controller:
                 if answer == 'opened':
                     print('Данная клетка уже открыта, попробуйте другую!')
                 else:
+                    if answer in ('hit', 'destroyed'):
+                        return True
                     break
             except Exception as e:
                 print('Что-то пошло не так...')
@@ -292,18 +294,19 @@ class Controller:
             self.last_bot_choice.append((x, y, None, answer))
             if answer == 'destroyed':
                 self.round_destroyed_ship()
-            return x, y
+            return x, y, answer
             
 
     def bot_turn(self):
         if not self.last_bot_choice:
-            x, y = self.bot_random_choice()
+            x, y, ans = self.bot_random_choice()
         else:
             
             temp_x, temp_y, tp, ans = self.last_bot_choice[-1]
             variants = set()
             if ans == 'hit':
                 while True:
+                    temp_x, temp_y, tp, ans = self.last_bot_choice[-1]
                     if tp is None:
                         bot_choice = randint(1, 4)
                     elif tp == 1:
@@ -313,7 +316,8 @@ class Controller:
                         
                     if (len(variants) == 4 and tp is None) or (len(variants) == 2 and tp is not None):
                         self.last_bot_choice.pop(-1)
-                        return False
+                        variants = set()
+                        continue
 
                     if bot_choice == 1:
                         if temp_y - 1 <= 0:
@@ -346,20 +350,23 @@ class Controller:
                     elif bot_ans == 'destroyed':
                         self.round_destroyed_ship()
                         self.last_bot_choice = []
+                        ans = 'destroyed'
                         break
                     elif bot_ans == 'missed':
                         if tp is not None:
                             self.last_bot_choice.pop(-1)
+                        ans = 'missed'
                         break
                     elif bot_ans == 'hit':
                         bot_tp = 1 if bot_choice in (2, 4) and self.last_bot_choice[-1][3] == 'hit' else 2
                         self.last_bot_choice[-1] = (temp_x, temp_y, bot_tp, ans)
                         self.last_bot_choice.append((x, y, bot_tp, bot_ans))
+                        ans = 'hit'
                         break
             else:
-                x, y = self.bot_random_choice()
+                x, y, ans = self.bot_random_choice()
         print('Бот сходил:', GamePole.LETTERS_LIST[x - 1], y)
-        return True
+        return ans
     
     def round_destroyed_ship(self, ship=None):
         if ship is None:
@@ -416,14 +423,19 @@ game = Controller(SIZE_GAME_POLE, mode, helper)
 turn = 'player'
 while True:
     if turn == 'player':
-        game.player_turn()
-        if game.check_winner():
-            break
+        if game.player_turn():
+            if game.check_winner():
+                break
+            continue
+        turn = 'player' if turn == 'bot' else 'bot'
     else:
-        while not game.bot_turn():
-            pass
-        if game.check_winner():
-            break
-        else:
+        res = game.bot_turn()
+        if res == 'hit':
+            continue
+        if res == 'destroyed':
+            if game.check_winner():
+                break
+            continue
+        if res == 'missed':
+            turn = 'player' if turn == 'bot' else 'bot'
             game.player.show()
-    turn = 'player' if turn == 'bot' else 'bot'
