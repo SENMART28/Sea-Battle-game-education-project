@@ -267,8 +267,6 @@ class Controller:
                 if answer == 'opened':
                     print('Данная клетка уже открыта, попробуйте другую!')
                 else:
-                    if answer in ('hit', 'destroyed'):
-                        return True
                     break
             except Exception as e:
                 print('Что-то пошло не так...')
@@ -281,6 +279,8 @@ class Controller:
             ship = self.bot.pole._pole[y - 1][x - 1].owner_ship
             self.round_destroyed_ship(ship)
         print('Ваш результат: ' + answer)
+        if answer in ('hit', 'destroyed'):
+            return True
         
     def bot_set_shot(self, x, y):
         return self.bot.set_shot(str(x), str(y), self.player)
