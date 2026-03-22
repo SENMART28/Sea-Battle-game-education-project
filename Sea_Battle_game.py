@@ -1,4 +1,5 @@
-from random import randint, choice
+from random import randint, choice, seed
+# seed(1)
 
 
 class Ship:
@@ -37,11 +38,6 @@ class Ship:
 
     def is_out_pole(self, size):
         return self._x + self._length > size if self._tp == 1 else self._y + self._length > size
-
-    # def __eq__(self, obj):
-    #     if isinstance(obj, Ship):
-    #         return self.get_start_coords() == obj.get_start_coords()
-    #     return False
 
 
 class GamePole:
@@ -148,6 +144,49 @@ class GamePole:
             pole._cell = value
             pole.owner_ship = ship
             pole.owner_number = i
+            
+    def set_cell_around(self, ship, value):
+        x, y = ship.get_start_coords()
+        if ship._tp == 1:
+            if x >= 1:
+                self._closed_pole[y][x - 1]._cell = value
+                if y >= 1:
+                    self._closed_pole[y - 1][x - 1]._cell = value
+                if y < self._size - 1:
+                    self._closed_pole[y + 1][x - 1]._cell = value
+            if x + ship._length < self._size:
+                self._closed_pole[y][x + ship._length]._cell = value
+                if y >= 1:
+                    self._closed_pole[y - 1][x + ship._length]._cell = value
+                if y < self._size - 1:
+                    self._closed_pole[y + 1][x + ship._length]._cell = value
+                
+        else:
+            if y >= 1:
+                self._closed_pole[y - 1][x]._cell = value
+                if x >= 1:
+                    self._closed_pole[y - 1][x - 1]._cell = value
+                if x < self._size - 1:
+                    self._closed_pole[y - 1][x + 1]._cell = value
+            if y + ship._length < self._size:
+                self._closed_pole[y + ship._length][x]._cell = value
+                if x >= 1:
+                    self._closed_pole[y + ship._length][x - 1]._cell = value
+                if x < self._size - 1:
+                    self._closed_pole[y + ship._length][x + 1]._cell = value
+                    
+        for i in range(ship._length):
+            if ship._tp == 1:
+                if y >= 1:
+                    self._closed_pole[y - 1][x + i]._cell = value
+                if y < self._size - 1:
+                    self._closed_pole[y + 1][x + i]._cell = value
+            else:
+                if x >= 1:
+                    self._closed_pole[y + i][x - 1]._cell = value
+                if x < self._size - 1:
+                    self._closed_pole[y + i][x + 1]._cell = value
+                    
 
     def show(self):
         print(('    ' + '  '.join(self.LETTERS_LIST))[:4+self._size*3])
@@ -209,10 +248,12 @@ class Game:
 
 
 class Controller:
-    def __init__(self, size=10, mode=False):
+    def __init__(self, size=10, mode=False, helper=False):
         self._size = size
         self.player = Game(size, mode)
         self.bot = Game(size)
+        self.last_bot_choice = []
+        self._helper = helper
 
     def player_turn(self):
         print('Ваше поле:')
@@ -232,23 +273,110 @@ class Controller:
                 print('Попробуйте снова!')
                 print(e)
                 continue
-
+        
+        if answer == 'destroyed' and self._helper:
+            x, y = GamePole.coords_convertor(x, y, self._size)
+            ship = self.bot.pole._pole[y - 1][x - 1].owner_ship
+            self.round_destroyed_ship(ship)
         print('Ваш результат: ' + answer)
-        return self.check_winner(self.player, 'bot', 'player')
+        
+    def bot_set_shot(self, x, y):
+        return self.bot.set_shot(str(x), str(y), self.player)
+    
+    def bot_random_choice(self):
+            while True:
+                x, y = randint(1, self._size), randint(1, self._size)
+                answer = self.bot.set_shot(str(x), str(y), self.player)
+                if answer != 'opened':
+                    break
+            self.last_bot_choice.append((x, y, None, answer))
+            if answer == 'destroyed':
+                self.round_destroyed_ship()
+            return x, y
+            
 
     def bot_turn(self):
-        while True:
-            x, y = randint(1, self._size), randint(1, self._size)
-            answer = self.bot.set_shot(str(x), str(y), self.player)
-            if answer != 'opened':
-                break
-        bot_choice = f'{GamePole.LETTERS_LIST[x - 1]} {y}'
-        print('Бот сходил: ' + bot_choice)
-        return self.check_winner(self.bot, 'player', 'bot')
+        if not self.last_bot_choice:
+            x, y = self.bot_random_choice()
+        else:
+            
+            temp_x, temp_y, tp, ans = self.last_bot_choice[-1]
+            variants = set()
+            if ans == 'hit':
+                while True:
+                    if tp is None:
+                        bot_choice = randint(1, 4)
+                    elif tp == 1:
+                        bot_choice = choice([2, 4])
+                    elif tp == 2:
+                        bot_choice = choice([1, 3])
+                        
+                    if (len(variants) == 4 and tp is None) or (len(variants) == 2 and tp is not None):
+                        self.last_bot_choice.pop(-1)
+                        return False
 
-    def check_winner(self, obj, winner, looser):
-        if not obj.pole._ships:
-            print(f'Победил {winner}, проиграл {looser}')
+                    if bot_choice == 1:
+                        if temp_y - 1 <= 0:
+                            variants.add(bot_choice)
+                            continue
+                        x, y = temp_x, temp_y - 1
+                        bot_ans = self.bot_set_shot(x, y)
+                    elif bot_choice == 2:
+                        if temp_x + 1 > self._size:
+                            variants.add(bot_choice)
+                            continue
+                        x, y = temp_x + 1, temp_y
+                        bot_ans = self.bot_set_shot(x, y)
+                    elif bot_choice == 3:
+                        if temp_y + 1 > self._size:
+                            variants.add(bot_choice)
+                            continue
+                        x, y = temp_x, temp_y + 1
+                        bot_ans = self.bot_set_shot(x, y)
+                    elif bot_choice == 4:
+                        if temp_x - 1 <= 0:
+                            variants.add(bot_choice)
+                            continue
+                        x, y = temp_x - 1, temp_y
+                        bot_ans = self.bot_set_shot(x, y)
+
+                    if bot_ans == 'opened':
+                        variants.add(bot_choice)
+                        continue
+                    elif bot_ans == 'destroyed':
+                        self.round_destroyed_ship()
+                        self.last_bot_choice = []
+                        break
+                    elif bot_ans == 'missed':
+                        if tp is not None:
+                            self.last_bot_choice.pop(-1)
+                        break
+                    elif bot_ans == 'hit':
+                        bot_tp = 1 if bot_choice in (2, 4) and self.last_bot_choice[-1][3] == 'hit' else 2
+                        self.last_bot_choice[-1] = (temp_x, temp_y, bot_tp, ans)
+                        self.last_bot_choice.append((x, y, bot_tp, bot_ans))
+                        break
+            else:
+                x, y = self.bot_random_choice()
+        print('Бот сходил:', GamePole.LETTERS_LIST[x - 1], y)
+        return True
+    
+    def round_destroyed_ship(self, ship=None):
+        if ship is None:
+            ship_info = self.last_bot_choice[-1]
+            x, y = ship_info[0], ship_info[1]
+            x, y = x - 1, y - 1
+            ship = self.player.pole._pole[y][x].owner_ship
+            self.bot.pole.set_cell_around(ship, 'miss')
+        else:
+            self.player.pole.set_cell_around(ship, 'miss')
+
+    def check_winner(self):
+        if not self.bot.pole._ships:
+            print('Победил Игрок, проиграл бот!')
+            return True
+        elif not self.player.pole._ships:
+            print('Победил бот, проиграл Игрок!')
             return True
         return False
 
@@ -281,16 +409,21 @@ SIZE_GAME_POLE = int(input('Введите размер поля от 8 до 13:
 if not (8 <= SIZE_GAME_POLE <= 13):
     raise CantCreatePoleException()
 
-mode = bool(input('Введите 1 если желаете сами расставить корабли, иначе пропустите этот этап: '))
-game = Controller(SIZE_GAME_POLE, mode)
+mode = bool(input(
+    'Введите 1 если желаете сами расставить корабли, иначе пропустите этот этап: '))
+helper = bool(input('Для включения помощи в отображения потопленных кораблей напишите 1, иначе пропустите этот пункт: '))
+game = Controller(SIZE_GAME_POLE, mode, helper)
 turn = 'player'
 while True:
     if turn == 'player':
-        if game.player_turn():
+        game.player_turn()
+        if game.check_winner():
             break
     else:
-        if not game.bot_turn():
-            game.player.show()
-        else:
+        while not game.bot_turn():
+            pass
+        if game.check_winner():
             break
+        else:
+            game.player.show()
     turn = 'player' if turn == 'bot' else 'bot'
